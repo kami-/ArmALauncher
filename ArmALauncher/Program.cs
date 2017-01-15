@@ -286,30 +286,44 @@ namespace ArmALauncher
                         "That's a bug in this launcher, please report. You can edit the config file meanwhile to adjust the teamspeak path.");
                 }
 
-                string pluginTarget = ts3path + "\\plugins\\" + pluginName;
+                string[] pluginTargetDirectories = {
+                    ts3path + @"\plugins",
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + @"\TS3Client\plugins",
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) + @"\TS3Client\plugins"
+                };
+                pluginTargetDirectories
+                    .ToList()
+                    .ForEach(dir => { Directory.CreateDirectory(dir); });
 
-                bool wantDeploy = !File.Exists(pluginTarget) ||
-                    Helpers.ChecksumFileSha256(pluginTarget) != Helpers.ChecksumFileSha256(modPath + "\\plugin\\" + pluginName);
+                var deployTargets = pluginTargetDirectories
+                    .Select(dir => dir + "\\" + pluginName)
+                    .Where(target => !File.Exists(target) ||
+                        Helpers.ChecksumFileSha256(target) != Helpers.ChecksumFileSha256(modPath + "\\plugin\\" + pluginName))
+                    .ToList();
 
-                if (wantDeploy)
+                if (deployTargets.Count > 0)
                 {
-                    var ret = MessageBox.Show("I want to deploy the " + modPath + " teamspeak DLL (" + pluginName + ") to " + pluginTarget + "." +
-                        "Is this the correct path? if NOT, press Cancel now and edit the configuration ini (or set deploy_acre to false). Make sure TeamSpeak IS NOT running before you continue!",
+                    var targetsString = deployTargets.Aggregate("", (acc, target) => acc + ", " + target);
+                    var ret = MessageBox.Show("I want to deploy the " + modPath + " teamspeak DLL (" + pluginName + ") to paths " + targetsString + "." +
+                        "Are these correct paths? if NOT, press Cancel now and edit the configuration ini (or set deploy_acre to false). Make sure TeamSpeak IS NOT running before you continue!",
                         "Continue?", MessageBoxButtons.OKCancel);
 
                     if (ret == DialogResult.Cancel)
                         throw new Exception("Aborted");
 
-                    Log("deploying acre plugin: " + pluginTarget);
+                    Log("deploying acre plugin: " + targetsString);
                     try
                     {
-                        File.Copy(modPath + "\\plugin\\" + pluginName, pluginTarget, true);
+                        deployTargets.ForEach(target =>
+                        {
+                            File.Copy(modPath + "\\plugin\\" + pluginName, target, true);
+                        });
                     } catch (IOException e)
                     {
                         MessageBox.Show("Failed to deploy ACRE DLL. Are you sure TeamSpeak WAS NOT running? Try again and if the error persists contact someone who knows what's going on...", "Error running game");
                         throw e;
                     }
-                    MessageBox.Show("I've deployed the ACRE plugin to\n\n" + pluginTarget + "\n\n" +
+                    MessageBox.Show("I've deployed the ACRE plugin to\n\n" + targetsString + "\n\n" +
                         "Please check in your teamspeak install if it's loaded, and restart it if neccessary (as admin!).");
                 }
             }
